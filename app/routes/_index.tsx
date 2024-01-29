@@ -1,5 +1,5 @@
 import { Text } from "@mantine/core";
-import type { MetaFunction } from "@vercel/remix";
+import { type MetaFunction } from "@vercel/remix";
 
 export const meta: MetaFunction = () => {
   return [
