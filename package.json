@@ -6,27 +6,60 @@
   "scripts": {
     "build": "remix vite:build",
     "dev": "remix vite:dev",
-    "typecheck": "tsc"
+    "test": "vitest run",
+    "typecheck": "tsc",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@mantine/core": "^7.7.0",
+    "@mantine/hooks": "^7.7.0",
+    "@mantine/modals": "^7.7.0",
+    "@mantine/notifications": "^7.7.0",
     "@remix-run/node": "^2.8.0",
     "@remix-run/react": "^2.8.0",
     "@remix-run/server-runtime": "^2.8.0",
+    "@remix-validated-form/with-zod": "^2.0.7",
+    "@tabler/icons-react": "^3.1.0",
     "@vercel/analytics": "^1.2.2",
     "@vercel/remix": "^2.8.0",
+    "clsx": "^2.1.0",
     "isbot": "^4",
+    "ky": "^1.2.3",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "remix-validated-form": "^5.1.5",
+    "zod": "^3.22.4",
+    "zod-form-data": "^2.0.2"
   },
   "devDependencies": {
+    "@chromatic-com/storybook": "^1.2.25",
     "@remix-run/dev": "^2.8.0",
     "@remix-run/eslint-config": "^2.8.0",
+    "@storybook/addon-essentials": "^8.0.5",
+    "@storybook/addon-interactions": "^8.0.5",
+    "@storybook/addon-links": "^8.0.5",
+    "@storybook/addon-onboarding": "^8.0.5",
+    "@storybook/blocks": "^8.0.5",
+    "@storybook/react": "^8.0.5",
+    "@storybook/react-vite": "^8.0.5",
+    "@storybook/test": "^8.0.5",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.2",
     "@types/react": "^18.2.20",
     "@types/react-dom": "^18.2.7",
     "eslint": "^8.38.0",
+    "eslint-plugin-storybook": "^0.8.0",
+    "jsdom": "^24.0.0",
+    "postcss": "^8.4.38",
+    "postcss-preset-mantine": "^1.13.0",
+    "postcss-simple-vars": "^7.0.1",
+    "storybook": "^8.0.5",
+    "storybook-dark-mode": "^4.0.1",
     "typescript": "^5.1.6",
     "vite": "^5.1.0",
-    "vite-tsconfig-paths": "^4.2.1"
+    "vite-tsconfig-paths": "^4.2.1",
+    "vitest": "^1.4.0"
   },
   "engines": {
     "node": ">=18.0.0"
