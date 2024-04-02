@@ -3,7 +3,6 @@ import {
   Text,
   Paper,
   Group,
-  Checkbox,
   Flex,
   Stack,
   Container,
@@ -131,15 +130,14 @@ export default function LoginPage() {
               />
               <ValidatedTextInput type="hidden" name="redirectTo" />
 
-              <Group justify="space-between" mt="lg">
-                <Checkbox label="Remember me" />
+              <Group justify="end" mt="xs">
                 <Link size="sm" to="/forgot-password">
                   Forgot password?
                 </Link>
               </Group>
               <SubmitButton
                 fullWidth
-                mt="xl"
+                mt="md"
                 isSubmittingProps={{
                   loading: true,
                 }}
