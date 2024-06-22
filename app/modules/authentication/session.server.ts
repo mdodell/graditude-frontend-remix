@@ -137,6 +137,7 @@ export async function createUserSession({
   const session = await getSession(request);
   session.set(ACCESS_TOKEN_KEY, token);
   session.set(REFRESH_TOKEN_KEY, refreshToken);
+  session.set("OBJECT_EXAMPLE", { firstName: "Mitchell", lastName: "Dodell" });
   headers.append("Set-Cookie", await sessionStorage.commitSession(session));
   return redirect(redirectTo, {
     headers,

@@ -1,5 +1,4 @@
 import {
-  Stack,
   Title,
   Paper,
   Group,
@@ -7,58 +6,41 @@ import {
   rem,
   Box,
   Text,
+  Stack,
 } from "@mantine/core";
 import { withZod } from "@remix-validated-form/with-zod";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { redirect } from "@vercel/remix";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@vercel/remix";
+import { HTTPError } from "ky";
 import { ValidatedForm, validationError } from "remix-validated-form";
 import { z } from "zod";
 import { SubmitButton } from "~/components/Form/SubmitButton";
+import { ValidatedTextInput } from "~/components/Form/ValidatedTextInput";
 import { Link } from "~/components/Link";
 import { getUserToken } from "~/modules/authentication/session.server";
+import { putNotification } from "~/modules/notifications/notifications.server";
+import classes from "~/styles/forgot-password.module.css";
 import { http } from "~/utils/api";
 
-import classes from "~/styles/forgot-password.module.css";
-import { ValidatedPasswordInput } from "~/components/Form/ValidatedPasswordInput";
-import { HTTPError } from "ky";
-import { putNotification } from "~/modules/notifications/notifications.server";
-
-function getKey(request: Request) {
-  const url = new URL(request.url);
-
-  const key = url.searchParams.get("key");
-
-  return key;
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Check if user ID exists - if it does, they should just go through a change password progress since they're already logged in
   const userId = await getUserToken(request);
-  if (userId) return redirect("/dashboard");
-
-  // Get the key parameter - if it doesn't exist, log them in
-  const key = getKey(request);
-
-  if (!key) {
-    throw redirect("/login");
-  }
+  if (userId) return redirect("/app");
 
   return null;
 };
 
 export const validator = withZod(
   z.object({
-    password: z
+    email: z
       .string()
-      .min(8, { message: "Password must be 8 characters" })
-      .max(72, { message: "Password must be 72 characters" }),
+      .min(1, { message: "Email is required" })
+      .email("Must be a valid email"),
   })
 );
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const body = await request.formData();
-
   const result = await validator.validate(body);
 
   if (result.error) {
@@ -66,42 +48,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    const key = getKey(request);
-    const { password } = result.data;
-    await http.post("reset-password", {
-      json: {
-        key,
-        password,
-      },
-    });
+    const { email } = result.data;
+    const res = await http
+      .post("reset-password-request", {
+        json: {
+          email,
+        },
+      })
+      .json<{ success: string }>();
 
     const headers = await putNotification({
       type: "success",
-      message: "Your password has been successfully reset",
+      message: res.success,
     });
 
-    return redirect("/dashboard", { headers });
-  } catch (e) {
-    if (e instanceof HTTPError) {
-      const message = (await e.response.json()) as { error: string };
-
+    return redirect(request.url, { headers });
+  } catch (error) {
+    if (error instanceof HTTPError) {
+      const message = (await error.response.json()) as { error: string };
       const headers = await putNotification({
         type: "error",
         message: message.error,
       });
-
       throw redirect(request.url, { headers });
     }
   }
 };
-export default function ResetPasswordPage() {
+
+export default function ForgotPasswordPage() {
   return (
     <Stack w="100%" align="center" justify="center">
       <Title className={classes.title} ta="center">
-        Reset your password
+        Forgot your password?
       </Title>
       <Text c="dimmed" fz="sm" ta="center">
-        Enter your new password
+        Enter your email to get a reset link
       </Text>
 
       <Paper
@@ -112,10 +93,10 @@ export default function ResetPasswordPage() {
         radius="md"
       >
         <ValidatedForm validator={validator} method="post" noValidate>
-          <ValidatedPasswordInput
-            name="password"
-            label="New password"
-            placeholder="Your password"
+          <ValidatedTextInput
+            name="email"
+            label="Your email"
+            placeholder="student@graditudeconnects.org"
             required
           />
           <Group justify="space-between" mt="lg" className={classes.controls}>

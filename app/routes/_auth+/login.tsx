@@ -1,30 +1,31 @@
 import {
-  Flex,
-  Stack,
   Title,
+  Text,
   Paper,
   Group,
+  Flex,
+  Stack,
   Container,
-  Text,
-  Grid,
 } from "@mantine/core";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@vercel/remix";
-import { redirect } from "@remix-run/react";
-import { withZod } from "@remix-validated-form/with-zod";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "@vercel/remix";
 import { ValidatedForm, validationError } from "remix-validated-form";
+import { withZod } from "@remix-validated-form/with-zod";
 import { z } from "zod";
 import { SubmitButton } from "~/components/Form/SubmitButton";
-import { ValidatedPasswordInput } from "~/components/Form/ValidatedPasswordInput";
 import { ValidatedTextInput } from "~/components/Form/ValidatedTextInput";
 import { Link } from "~/components/Link";
+import { ValidatedPasswordInput } from "~/components/Form/ValidatedPasswordInput";
+import { HTTPError } from "ky";
+import type { Tokens } from "~/modules/authentication/types";
+import { putNotification } from "~/modules/notifications/notifications.server";
+
+import { redirect, useSearchParams } from "@remix-run/react";
+import { http } from "~/utils/api";
 import {
   createUserSession,
   getUserToken,
+  safeRedirect,
 } from "~/modules/authentication/session.server";
-import type { Tokens } from "~/modules/authentication/types";
-import { http } from "~/utils/api";
-import { HTTPError } from "ky";
-import { putNotification } from "~/modules/notifications/notifications.server";
 
 export const validator = withZod(
   z.object({
@@ -36,17 +37,21 @@ export const validator = withZod(
       .string()
       .min(8, { message: "Password must be 8 characters" })
       .max(72, { message: "Password must be 72 characters" }),
-    firstName: z
-      .string()
-      .min(1, { message: "First name must be at least 1 character" }),
-    lastName: z
-      .string()
-      .min(1, { message: "Last name must be at least 1 character" }),
+    redirectTo: z.string().optional(),
   })
 );
 
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const userId = await getUserToken(request);
+  if (userId) throw redirect("/app");
+
+  return null;
+};
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const body = await request.formData();
+
+  const redirectTo = safeRedirect(body.get("redirectTo"));
 
   const result = await validator.validate(body);
 
@@ -56,76 +61,63 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const auth = await http
-      .post("create-account", {
+      .post("login", {
         json: result.data,
       })
-      .json<{ success: string } & Tokens>();
+      .json<
+        {
+          success: string;
+        } & Tokens
+      >();
 
     return createUserSession({
       token: auth.accessToken,
       refreshToken: auth.refreshToken,
       request,
-      redirectTo: "/dashboard",
+      redirectTo,
     });
-  } catch (e) {
-    if (e instanceof HTTPError) {
-      const { error } = await e.response.json();
+  } catch (error) {
+    if (error instanceof HTTPError) {
+      const { error: message } = await error.response.json();
 
-      const headers = await putNotification({
-        message: error,
-        type: "error",
-      });
+      const headers = await putNotification(
+        { type: "error", message },
+        request.headers
+      );
 
-      throw redirect(request.url, {
-        headers,
-      });
+      throw redirect(request.url, { headers });
     }
   }
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const userId = await getUserToken(request);
-  if (userId) return redirect("/dashboard");
-
-  return null;
-};
-
-export default function RegisterPage() {
+export default function LoginPage() {
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo") || "/app";
   return (
     <Flex w="100%" align="center" justify="center">
       <Stack style={{ width: 800 }}>
         <Title ta="center" fw="bold">
-          Welcome!
+          Welcome back!
         </Title>
-        <Text c="dimmed" size="sm" ta="center">
-          Have an account already?{" "}
-          <Link size="sm" to="/login">
-            Login
+        <Group gap="xs" justify="center">
+          <Text c="dimmed" size="sm" ta="center">
+            Do not have an account yet?
+          </Text>
+          <Link size="sm" to="/register">
+            Create account
           </Link>
-        </Text>
+        </Group>
 
         <Container mx={0}>
           <Paper withBorder shadow="md" p="lg" mt="lg" radius="md">
-            <ValidatedForm validator={validator} method="post" noValidate>
-              <Grid>
-                <Grid.Col span={6}>
-                  <ValidatedTextInput
-                    required
-                    label="First Name"
-                    name="firstName"
-                    placeholder="Fred"
-                  />
-                </Grid.Col>
-                <Grid.Col span={6}>
-                  <ValidatedTextInput
-                    required
-                    label="Last Name"
-                    name="lastName"
-                    placeholder="Stevens"
-                  />
-                </Grid.Col>
-              </Grid>
-
+            <ValidatedForm
+              validator={validator}
+              defaultValues={{
+                redirectTo,
+              }}
+              method="post"
+              noValidate
+            >
               <ValidatedTextInput
                 required
                 label="Email"
@@ -152,7 +144,7 @@ export default function RegisterPage() {
                   loading: true,
                 }}
               >
-                Sign Up
+                Sign in
               </SubmitButton>
             </ValidatedForm>
           </Paper>

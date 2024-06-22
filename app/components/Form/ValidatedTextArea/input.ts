@@ -1,0 +1,1 @@
+export { ValidatedTextArea } from "./ValidatedTextArea";

@@ -29,7 +29,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       type: "success",
     });
 
-    return redirect("/dashboard", { headers });
+    return redirect("/app", { headers });
   } catch (e) {
     const headers = await putNotification({
       id: "verify-account-failure",
@@ -37,7 +37,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       type: "error",
     });
 
-    return redirect("/dashboard", { headers });
+    return redirect("/app", { headers });
   }
 };
 

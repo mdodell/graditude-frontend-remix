@@ -10,24 +10,18 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  defer,
+  json,
+  redirect,
   useLoaderData,
 } from "@remix-run/react";
 import { ColorSchemeScript, MantineProvider } from "@mantine/core";
-import {
-  closeAccount,
-  getUser,
-  logout,
-} from "~/modules/authentication/session.server";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@vercel/remix";
+import { getUser } from "~/modules/authentication/session.server";
+import type { LoaderFunctionArgs } from "@vercel/remix";
 import { popNotification } from "~/modules/notifications/notifications.server";
-import { withZod } from "@remix-validated-form/with-zod";
-import { z } from "zod";
 import { Notifications, notifications } from "@mantine/notifications";
 import { IconX, IconCheck } from "@tabler/icons-react";
 import { Suspense, useEffect } from "react";
 import { FullPageLoader } from "~/components/FullPageLoader";
-import { MainLayout } from "~/components/Layout";
 import { ModalsProvider } from "@mantine/modals";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -37,7 +31,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const user = await getUser(request, notificationHeaders);
 
-  return defer(
+  // If the user has not onboarded yet, then redirect them to the onboarding flow
+  if (
+    user &&
+    !user.onboardingProgress.hasJoinedOrg &&
+    !new URL(request.url).pathname.startsWith("/app/onboarding")
+  ) {
+    throw redirect("/app/onboarding");
+  }
+
+  return json(
     {
       user,
       notification,
@@ -46,39 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 };
 
-export const validator = withZod(
-  z.union([
-    z.object({
-      intent: z.enum(["logout"]),
-    }),
-    z.object({
-      intent: z.enum(["delete-account"]),
-    }),
-  ])
-);
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const body = await request.formData();
-
-  const result = await validator.validate(body);
-
-  if (result.error) {
-    return null;
-  }
-
-  const { intent } = result.data;
-
-  switch (intent) {
-    case "logout":
-      return logout(request);
-    case "delete-account":
-      return closeAccount(request);
-    default:
-      return null;
-  }
-};
-
-export function Layout({ children }: { children: React.ReactNode }) {
+export default function App() {
   const { user, notification } = useLoaderData<typeof loader>();
 
   useEffect(() => {
@@ -108,9 +79,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Notifications />
             <Suspense fallback={<FullPageLoader />}>
               <Await resolve={user}>
-                <MainLayout>
-                  <Outlet />
-                </MainLayout>
+                <Outlet />
               </Await>
             </Suspense>
           </ModalsProvider>
@@ -121,8 +90,4 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </body>
     </html>
   );
-}
-
-export default function App() {
-  return <Outlet />;
 }

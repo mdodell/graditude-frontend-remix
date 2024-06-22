@@ -1,13 +1,5 @@
 import cx from "clsx";
-import {
-  UnstyledButton,
-  Group,
-  Avatar,
-  rem,
-  Text,
-  Menu,
-  useMantineTheme,
-} from "@mantine/core";
+import { UnstyledButton, Group, Avatar, rem, Text, Menu } from "@mantine/core";
 import {
   IconChevronDown,
   IconLogout,
@@ -22,7 +14,6 @@ import { modals } from "@mantine/modals";
 
 export function UserMenu() {
   const user = useUser();
-  const theme = useMantineTheme();
   const navigate = useNavigate();
   const submit = useSubmit();
   const [userMenuOpened, setUserMenuOpened] = useState(false);

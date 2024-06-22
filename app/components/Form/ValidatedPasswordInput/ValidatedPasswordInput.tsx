@@ -7,11 +7,16 @@ interface ValidatedPasswordInputProps extends PasswordInputProps {
 
 export function ValidatedPasswordInput({
   name,
+  onChange,
   ...rest
 }: ValidatedPasswordInputProps) {
   const { error, getInputProps } = useField(name);
   return (
-    <PasswordInput {...rest} {...getInputProps({ id: name })} error={error} />
+    <PasswordInput
+      {...rest}
+      {...getInputProps({ id: name, onChange })}
+      error={error}
+    />
   );
 }
 

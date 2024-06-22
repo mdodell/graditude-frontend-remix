@@ -1,6 +1,9 @@
 import { redirect } from "@vercel/remix";
-import type { LoaderFunctionArgs } from "@vercel/remix";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
+export const loader = () => {
   return redirect("/login");
 };
+
+export default function Page() {
+  return null;
+}

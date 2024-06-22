@@ -1,0 +1,9 @@
+.truncated {
+  &:hover {
+    cursor: help;
+  }
+}
+
+.tooltip {
+  word-break: break-word;
+}

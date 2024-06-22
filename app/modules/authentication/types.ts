@@ -12,5 +12,8 @@ export type SuccessfulAuthResponse = {
   account: {
     email: string;
     profile: Profile;
+    onboardingProgress: {
+      hasJoinedOrg: null | boolean;
+    };
   };
 } & Tokens;

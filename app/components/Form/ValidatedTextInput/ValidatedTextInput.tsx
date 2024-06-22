@@ -5,9 +5,22 @@ interface ValidatedTextInputProps extends TextInputProps {
   name: string;
 }
 
-export function ValidatedTextInput({ name, ...rest }: ValidatedTextInputProps) {
+export function ValidatedTextInput({
+  name,
+  onChange,
+  ...rest
+}: ValidatedTextInputProps) {
   const { error, getInputProps } = useField(name);
-  return <TextInput {...rest} {...getInputProps({ id: name })} error={error} />;
+  return (
+    <TextInput
+      {...rest}
+      {...getInputProps({
+        id: name,
+        onChange,
+      })}
+      error={error}
+    />
+  );
 }
 
 export default ValidatedTextInput;
