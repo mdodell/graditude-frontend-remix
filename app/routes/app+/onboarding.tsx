@@ -6,34 +6,18 @@ import {
   Group,
   Stack,
   useMantineTheme,
-  MantineProvider,
   Button,
   Box,
-  Divider,
-  Tabs,
-  rem,
+  TextInput,
+  Textarea,
+  ColorInput,
 } from "@mantine/core";
-import { useForm } from "@mantine/form";
-import { generateColors } from "@mantine/colors-generator";
-import { withZod } from "@remix-validated-form/with-zod";
 import {
   redirect,
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@vercel/remix";
-import { HTTPError } from "ky";
-import {
-  ValidatedForm,
-  useControlField,
-  useFormContext,
-  validationError,
-} from "remix-validated-form";
 import { z } from "zod";
-import { DeviceFrame } from "~/components/DeviceFrame";
-import { SubmitButton } from "~/components/Form/SubmitButton";
-import { ValidatedColorInput } from "~/components/Form/ValidatedColorInput";
-import ValidatedTextArea from "~/components/Form/ValidatedTextArea/ValidatedTextArea";
-import { ValidatedTextInput } from "~/components/Form/ValidatedTextInput";
 import { useUser } from "~/hooks/useUser";
 import {
   getUserToken,
@@ -41,84 +25,76 @@ import {
 } from "~/modules/authentication/session.server";
 import { putNotification } from "~/modules/notifications/notifications.server";
 import { http } from "~/utils/api";
-import { useMemo } from "react";
-import {
-  IconPhoto,
-  IconMessageCircle,
-  IconSettings,
-} from "@tabler/icons-react";
-import { TruncatedText } from "~/components/TruncatedText";
-import { CountryCombobox } from "~/routes/resources+/CountryCombobox";
-import { SubdivisionCombobox } from "~/routes/resources+/SubdivisionCombobox";
+import { HTTPError } from "ky";
 import { CollegeCombobox } from "~/routes/resources+/CollegeCombobox";
+import { Form, json, useActionData } from "@remix-run/react";
+import { getFirstErrorMessage, getFlattenedErrors } from "~/utils/form";
 
-const schema = z.object({
-  name: z
-    .string()
-    .min(1, { message: "Name must be 1 character" })
-    .max(72, { message: "Name must be less than 72 characters" }),
-  domain: z
-    .string()
-    .regex(/^[\w-]+$/, {
-      message:
-        "Domains must use only letters, numbers, hyphens, and underscores.",
-    })
-    .min(1, { message: "Domain must be 1" })
-    .max(30, { message: "Domain must be less than 30 characters" }),
-  primaryColor: z.string(),
-  description: z
-    .string()
-    .max(240, {
-      message: "Your description can not be more than 240 characters",
-    })
-    .optional(),
-  country: z.string().min(1, { message: "You must select a country" }),
-  subdivision: z.string().min(1, { message: "You must select a subdivision" }),
-  countryCode: z.string().optional(),
-  college: z.string().min(1, { message: "You must select a college. " }),
-  domains: z.array(z.string()),
-});
-
-const clientValidator = withZod(schema);
+const schema = z
+  .object({
+    name: z
+      .string()
+      .min(1, { message: "Name is required" })
+      .max(72, { message: "Name must be less than 72 characters" }),
+    domain: z
+      .string()
+      .regex(/^[\w-]+$/, {
+        message:
+          "Domains must use only letters, numbers, hyphens, and underscores.",
+      })
+      .min(1, { message: "Domain must be 1" })
+      .max(30, { message: "Domain must be less than 30 characters" }),
+    primaryColor: z.string(),
+    description: z
+      .string()
+      .max(240, {
+        message: "Your description can not be more than 240 characters",
+      })
+      .optional(),
+    country: z.string().min(1, { message: "You must select a country" }),
+    subdivision: z
+      .string()
+      .min(1, { message: "You must select a subdivision" }),
+    college: z.string().min(1, { message: "You must select a college. " }),
+  })
+  .superRefine(async (data, ctx) => {
+    try {
+      if (data.domain) {
+        await http.get(`organizations/${data.domain}`).json();
+        ctx.addIssue({
+          path: ["domain"],
+          message: "Whoops! That domain is taken.",
+          code: "custom",
+          fatal: true,
+        });
+      }
+    } catch (e) {}
+  });
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const serverValidator = withZod(
-    schema.refine(
-      async (data) => {
-        return await http
-          .get(`organizations/${data.domain}`)
-          .then(() => false)
-          .catch(() => true);
-      },
-      {
-        message: "Whoops! That domain is taken.",
-        path: ["domain"],
-      }
-    )
-  );
-
-  // Since the db check is already in the schema, we can continue on as normal
-  const result = await serverValidator.validate(await request.formData());
-
-  if (result.error) return validationError(result.error);
   const userToken = await getUserToken(request);
 
+  const formPayload = Object.fromEntries(await request.formData());
+
   try {
+    const result = await schema.parseAsync(formPayload);
+
     await http
       .post("organizations", {
         json: {
-          organization: result.data,
+          organization: result,
         },
         headers: {
           Authorization: `Bearer ${userToken}`,
         },
       })
       .json();
-
-    return redirect(`/organization/${result.data.domain}`);
-  } catch (e) {
-    if (e instanceof HTTPError) {
-      const message = await e.response.json();
+    return redirect(`/organization/${result.domain}`);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return json({ fieldErrors: getFlattenedErrors(error).fieldErrors });
+    } else if (error instanceof HTTPError) {
+      const message = await error.response.json();
 
       const headers = await putNotification({
         type: "error",
@@ -140,38 +116,19 @@ const FORM_NAME = "onboarding";
 
 export default function OnboardingPage() {
   const user = useUser();
+  const errors = useActionData<typeof action>();
+  const getError = getFirstErrorMessage(errors?.fieldErrors);
   const theme = useMantineTheme();
-  const defaultColor = theme.colors.blue[5];
 
-  const initialValues: z.infer<typeof schema> = {
-    name: "My Organization",
-    description: "Write something here about your first organization.",
-    domain: "your-organization",
-    primaryColor: defaultColor,
-    country: "",
-    subdivision: "",
-    countryCode: "",
-    college: "",
-    domains: [],
-  };
-  const previewState = useForm<z.infer<typeof schema>>({
-    mode: "controlled",
-    initialValues,
-  });
-
-  const [domain, setDomain] = useControlField("domain", FORM_NAME);
-
-  const themeColor = useMemo(
-    () => generateColors(previewState.values.primaryColor),
-    [previewState.values.primaryColor]
-  );
-
-  const iconStyle = { width: rem(12), height: rem(12) };
+  // const themeColor = useMemo(
+  //   () => generateColors(previewState.values.primaryColor),
+  //   [previewState.values.primaryColor]
+  // );
 
   return (
     <Grid w="100%" gutter={0} display="flex" overflow="hidden">
       <Grid.Col
-        span={3}
+        span={{ xs: 12, md: 3 }}
         p="md"
         display="flex"
         style={{ flexDirection: "column" }}
@@ -192,87 +149,55 @@ export default function OnboardingPage() {
             </Stack>
           </Group>
         </Box>
-        <ValidatedForm
-          validator={clientValidator}
-          method="post"
-          noValidate
-          id={FORM_NAME}
-          defaultValues={{
-            primaryColor: defaultColor,
-          }}
-          style={{ flexGrow: 1 }}
-        >
+        <Form method="post" noValidate id={FORM_NAME} style={{ flexGrow: 1 }}>
           <Stack h="100%" justify="space-between">
             <Stack gap="xs">
-              <ValidatedTextInput
+              <TextInput
                 required
-                label="Organization Name"
                 name="name"
-                placeholder="Your Organization"
+                label="Organization Name"
+                placeholder="Your organization"
+                error={getError("name")}
               />
-              <ValidatedTextInput
+              <TextInput
                 required
                 label="Domain"
                 name="domain"
                 placeholder="your-org"
                 description="This will be the URL where your organization is on Graditude."
                 leftSection="/"
-                onChange={(e) => setDomain(e.currentTarget.value)}
+                error={getError("domain")}
               />
-              <ValidatedTextArea
+              <Textarea
                 required
                 label="Description"
                 name="description"
                 placeholder="Tell us what your organization is about."
+                error={getError("description")}
               />
-              <ValidatedColorInput
+              <ColorInput
                 required
                 label="Branding"
                 name="primaryColor"
+                defaultValue={theme.colors.blue[5].toUpperCase()}
                 description="The core branding for your organization."
-                onChange={(color) =>
-                  previewState.setFieldValue("primaryColor", color)
-                }
+                error={getError("primaryColor")}
               />
-              <CountryCombobox
-                name="country"
-                onChange={(countryData) =>
-                  previewState.setFieldValue(
-                    "countryCode",
-                    countryData.alpha_code
-                  )
-                }
+              <CollegeCombobox
+                name="college"
+                error={getError("college")}
+                onChange={(data) => console.log({ data })}
               />
-              {previewState.values.countryCode && (
-                <SubdivisionCombobox
-                  name="subdivision"
-                  country={previewState.values.countryCode}
-                />
-              )}
-              {previewState.values.countryCode && (
-                <CollegeCombobox
-                  name="college"
-                  countryCode={previewState.values.countryCode}
-                  onChange={(collegeData) =>
-                    previewState.setFieldValue("domains", collegeData.domains)
-                  }
-                />
-              )}
             </Stack>
 
-            <SubmitButton
-              fullWidth
-              isSubmittingProps={{
-                loading: true,
-              }}
-            >
+            <Button type="submit" fullWidth>
               Create Organization
-            </SubmitButton>
+            </Button>
           </Stack>
-        </ValidatedForm>
+        </Form>
       </Grid.Col>
-      <Grid.Col span={9} bg="gray.4">
-        <DeviceFrame
+      <Grid.Col span={9} bg="gray.4" visibleFrom="md">
+        {/* <DeviceFrame
           p="xl"
           url={`https://www.graditudebeta.org/organization/${
             domain || initialValues.domain
@@ -328,7 +253,7 @@ export default function OnboardingPage() {
               </Tabs>
             </Box>
           </MantineProvider>
-        </DeviceFrame>
+        </DeviceFrame> */}
       </Grid.Col>
     </Grid>
   );
