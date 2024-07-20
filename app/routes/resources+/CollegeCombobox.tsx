@@ -105,8 +105,9 @@ export function CollegeCombobox({
       >
         <Combobox.Target>
           <TextInput
+            required={true}
             error={error}
-            label="Select your college"
+            label="College"
             placeholder="Select your college"
             value={selectedCollege || searchInput}
             rightSection={showSpinner && <Loader size={18} />}
