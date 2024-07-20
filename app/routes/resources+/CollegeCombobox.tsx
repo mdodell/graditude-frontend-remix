@@ -1,8 +1,15 @@
-import { Combobox, InputBase, Loader, useCombobox, Text } from "@mantine/core";
-import { useDebouncedValue, useIntersection } from "@mantine/hooks";
+import {
+  Combobox,
+  InputBase,
+  Loader,
+  useCombobox,
+  TextInput,
+  ScrollArea,
+} from "@mantine/core";
+import { useDebouncedCallback } from "@mantine/hooks";
 import { useFetcher } from "@remix-run/react";
 import { json, type LoaderFunctionArgs } from "@vercel/remix";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useSpinDelay } from "spin-delay";
 import { http } from "~/utils/api";
 import type { WithPaginationMeta } from "~/utils/types";
@@ -23,7 +30,7 @@ const fetchColleges = async (request: Request) => {
 
   try {
     const colleges = await http
-      .get("colleges", {
+      .get("colleges/search", {
         searchParams,
       })
       .json<BaseResponse & WithPaginationMeta>();
@@ -35,77 +42,48 @@ const fetchColleges = async (request: Request) => {
   }
 };
 
-const SEE_MORE = "SEE_MORE";
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   return fetchColleges(request);
 };
 
 interface CollegeComboboxProps {
   name: string;
-  onChange: (collegeData: CollegeData) => void;
   error?: string;
+  onChange: (data: CollegeData) => void;
 }
 
 export function CollegeCombobox({
   name,
-  onChange,
   error,
+  onChange,
 }: CollegeComboboxProps) {
-  const collegeFetcher = useFetcher<typeof loader>();
-  const firstOpen = useRef(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { ref, entry } = useIntersection({
-    root: containerRef.current,
-    threshold: 1,
-  });
-  const [_searchValue, setSearchValue] = useState("");
-  const [searchValue] = useDebouncedValue(_searchValue, 200);
+  const [searchInput, setSearchInput] = useState("");
 
-  useEffect(() => {
-    if (!collegeFetcher.data || collegeFetcher.state === "loading") {
-      return;
-    }
-    // If we have new data - append it
-    if (collegeFetcher.data) {
-      const newColleges = collegeFetcher.data.response.colleges;
-
-      setColleges((prevColleges) => [...prevColleges, ...newColleges]);
-    }
-  }, [collegeFetcher.state]);
-
-  const [page, setPage] = useState(1);
-
-  const [selectedCollege, setSelectedCollege] = useState<string | undefined>();
-  const [colleges, setColleges] = useState<CollegeData[]>([]);
-
-  const cb = useCombobox({
-    onDropdownOpen: () => {
-      const hasBeenOpened = firstOpen.current;
-      if (!hasBeenOpened) {
-        firstOpen.current = true;
-
-        collegeFetcher.load(`/resources/CollegeCombobox?page=1&limit=50`);
-      }
-    },
-  });
-
-  useEffect(() => {
-    if (entry?.isIntersecting) {
-      setPage((prev) => prev + 1);
-
-      collegeFetcher.load(
-        `/resources/CollegeCombobox?page=${page + 1}&limit=50`
-      );
-    }
-  }, [entry?.isIntersecting]);
-
-  const loading = collegeFetcher.state !== "idle";
-
-  const showSpinner = useSpinDelay(loading, {
-    delay: 150,
+  const collegeFetcher = useFetcher<typeof loader>({ key: searchInput });
+  const colleges = collegeFetcher.data?.response.colleges ?? [];
+  const busy = collegeFetcher.state !== "idle";
+  const [selectedCollege, setSelectedCollege] = useState("");
+  const showSpinner = useSpinDelay(busy, {
+    delay: 0,
     minDuration: 300,
   });
+
+  const handleSearch = useDebouncedCallback(async (query: string) => {
+    if (query.length > 0) {
+      collegeFetcher.submit(
+        { query },
+        { method: "GET", action: "/resources/CollegeCombobox" }
+      );
+    }
+  }, 150);
+
+  const cb = useCombobox();
+
+  const options = colleges.map((college) => (
+    <Combobox.Option value={college.name} key={college.name}>
+      {college.name}
+    </Combobox.Option>
+  ));
 
   return (
     <>
@@ -115,77 +93,48 @@ export function CollegeCombobox({
         name={name}
         value={selectedCollege || ""}
       />
-
       <Combobox
         store={cb}
         position="bottom"
-        keepMounted={true}
-        withinPortal={false}
         onOptionSubmit={(val) => {
-          const collegeData = colleges.find((college) => college.name === val)!;
-
-          onChange(collegeData);
-
-          setSearchValue(val);
           setSelectedCollege(val);
+          const college = colleges.find((college) => college.name === val)!;
+          onChange(college);
           cb.closeDropdown();
         }}
       >
         <Combobox.Target>
-          <InputBase
-            rightSection={
-              showSpinner ? <Loader size={18} /> : <Combobox.Chevron />
-            }
+          <TextInput
             error={error}
-            onClick={() => {
-              cb.openDropdown();
-            }}
-            onChange={({ target: { value } }) => {
-              cb.openDropdown();
-              // Don't show filtered colleges
-              // setSearchValue(value);
-              // setSelectedCollege("");
-            }}
-            onFocus={() => cb.openDropdown()}
-            onBlur={() => {
-              cb.closeDropdown();
-            }}
-            rightSectionPointerEvents="none"
-            value={selectedCollege || ""}
-            label="College"
+            label="Select your college"
             placeholder="Select your college"
+            value={selectedCollege || searchInput}
+            rightSection={showSpinner && <Loader size={18} />}
+            onChange={({ currentTarget: { value } }) => {
+              if (selectedCollege.length > 0) {
+                setSelectedCollege("");
+              }
+              if (value.length === 0) {
+                cb.closeDropdown();
+              }
+              cb.openDropdown();
+              setSearchInput(value);
+              handleSearch(value);
+            }}
           />
         </Combobox.Target>
-        <Combobox.Dropdown ref={containerRef}>
-          <Combobox.Options mah={150} style={{ overflowY: "auto" }}>
-            {showSpinner ? (
-              <Combobox.Empty>Loading....</Combobox.Empty>
-            ) : (
-              <>
-                {colleges.map((college, index) => (
-                  <Combobox.Option
-                    key={college.name}
-                    value={college.name}
-                    // Give at least 3 options before fetching
-                    ref={index === colleges.length - 3 ? ref : undefined}
-                  >
-                    {college.name}
-                  </Combobox.Option>
-                ))}
-                {collegeFetcher.data?.response.pagination.totalCount &&
-                  collegeFetcher.data?.response.pagination.totalCount > 0 && (
-                    <Combobox.Option value={SEE_MORE}>
-                      <Text c="dimmed" display="inline-block">
-                        {`...and ${
-                          collegeFetcher.data!.response.pagination?.totalCount -
-                          colleges.length
-                        } more. `}
-                      </Text>
-                    </Combobox.Option>
-                  )}
-              </>
-            )}
-          </Combobox.Options>
+        <Combobox.Dropdown>
+          {showSpinner ? (
+            <Combobox.Empty>Loading...</Combobox.Empty>
+          ) : (
+            <ScrollArea.Autosize mah={200} type="scroll">
+              {colleges.length === 0 && collegeFetcher.state === "idle" ? (
+                <Combobox.Empty>No colleges found.</Combobox.Empty>
+              ) : (
+                <Combobox.Options>{options}</Combobox.Options>
+              )}
+            </ScrollArea.Autosize>
+          )}
         </Combobox.Dropdown>
       </Combobox>
     </>

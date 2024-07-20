@@ -13,8 +13,10 @@ export const getFlattenedErrors = (errors: ZodError) => {
 };
 
 export const getFirstErrorMessage =
-  (errors?: ReturnType<typeof getFlattenedErrors>["fieldErrors"]) =>
-  (field: string) => {
+  <T extends string = string>(
+    errors?: ReturnType<typeof getFlattenedErrors>["fieldErrors"]
+  ) =>
+  (field: T) => {
     if (!errors) {
       return undefined;
     }

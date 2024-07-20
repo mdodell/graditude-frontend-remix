@@ -29,6 +29,8 @@ import { HTTPError } from "ky";
 import { CollegeCombobox } from "~/routes/resources+/CollegeCombobox";
 import { Form, json, useActionData } from "@remix-run/react";
 import { getFirstErrorMessage, getFlattenedErrors } from "~/utils/form";
+import { DynamicEmailSelect } from "~/components/DynamicEmailSelect";
+import { useState } from "react";
 
 const schema = z
   .object({
@@ -51,11 +53,39 @@ const schema = z
         message: "Your description can not be more than 240 characters",
       })
       .optional(),
-    country: z.string().min(1, { message: "You must select a country" }),
-    subdivision: z
-      .string()
-      .min(1, { message: "You must select a subdivision" }),
     college: z.string().min(1, { message: "You must select a college. " }),
+    emails: z
+      .string()
+      .transform((emails) => {
+        console.log(emails);
+        const emailArray = emails.split(",");
+
+        // If the array is just an empty string - meaning there are no emails, just return an empty array
+        if (emailArray.length === 1 && emailArray[0] === "") {
+          return [];
+        }
+
+        return emailArray;
+      })
+      .pipe(
+        z
+          .string({
+            errorMap: (issue, ctx) => {
+              switch (issue.code) {
+                case "invalid_string":
+                  return {
+                    message: `${ctx.data} is an invalid email.`,
+                  };
+                default:
+                  return {
+                    message: ctx.defaultError,
+                  };
+              }
+            },
+          })
+          .email()
+          .array()
+      ),
   })
   .superRefine(async (data, ctx) => {
     try {
@@ -83,6 +113,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .post("organizations", {
         json: {
           organization: result,
+          emails: result.emails,
         },
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -117,8 +148,13 @@ const FORM_NAME = "onboarding";
 export default function OnboardingPage() {
   const user = useUser();
   const errors = useActionData<typeof action>();
-  const getError = getFirstErrorMessage(errors?.fieldErrors);
+  const getError = getFirstErrorMessage<keyof z.infer<typeof schema>>(
+    errors?.fieldErrors
+  );
   const theme = useMantineTheme();
+  const [collegeDomains, setCollegeDomains] = useState<string[] | undefined>(
+    undefined
+  );
 
   // const themeColor = useMemo(
   //   () => generateColors(previewState.values.primaryColor),
@@ -169,14 +205,12 @@ export default function OnboardingPage() {
                 error={getError("domain")}
               />
               <Textarea
-                required
                 label="Description"
                 name="description"
                 placeholder="Tell us what your organization is about."
                 error={getError("description")}
               />
               <ColorInput
-                required
                 label="Branding"
                 name="primaryColor"
                 defaultValue={theme.colors.blue[5].toUpperCase()}
@@ -186,7 +220,18 @@ export default function OnboardingPage() {
               <CollegeCombobox
                 name="college"
                 error={getError("college")}
-                onChange={(data) => console.log({ data })}
+                onChange={(data) => setCollegeDomains(data.domains)}
+              />
+              <DynamicEmailSelect
+                additionalEmails={collegeDomains}
+                name="emails"
+                pillsInputProps={{
+                  label: "Invite students (optional)",
+                }}
+                errors={errors?.fieldErrors.emails?.map((e) => e.message)}
+                pillsInputFieldProps={{
+                  placeholder: "Enter email addresses",
+                }}
               />
             </Stack>
 
